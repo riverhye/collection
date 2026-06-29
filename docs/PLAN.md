@@ -186,14 +186,35 @@ entry_tags  (entry_id, tag_id)            -- 조인. 태그 필터/자동완성/
 ### 설정 파일 공부 순서
 바깥 지도 → 앱 정체성 → 코드 처리 파이프라인 → 데이터 설정 순으로 본다.
 
-DONE
-- babel.config.js — 트랜스파일 규칙. Expo preset + `.sql` inline import.
-DOING
-- package.json — 프로젝트 명세서. deps/scripts/entrypoint 확인.
-REST
-- app.json — 앱 정체성·네이티브 설정·Expo config plugin.
-- tsconfig.json — TypeScript 규칙과 `@/*`, `@/assets/*` alias.
+#### DONE
+
+**babel.config.js** — 트랜스파일 규칙
+- Expo preset + `.sql` inline import
+
+**package.json** — 프로젝트 명세서 (deps/scripts/entrypoint)
+- `main: expo-router/entry` = 앱 진입점
+  - RN의 `registerRootComponent`(AppRegistry 등록) 호출을 자동화
+  - 루트 컴포넌트 자리에 `ctx`(`require.context`로 `src/app` 폴더 스캔)를 꽂아 파일기반 라우팅
+
+**app.json** — 앱 정체성 · 네이티브 설정의 단일 소스
+- `scheme: "collection"` = 딥링크 (`collection://...`로 앱 특정 화면 열기, 공유시트/URL붙여넣기 토대)
+- `plugins` = config plugin: prebuild 때 네이티브 파일(Info.plist/AndroidManifest/gradle) 수정하는 js 함수
+  - 대부분 라이브러리 제공(expo-router/expo-sqlite 등), 이름만 적으면 실행
+  - plugin이 네이티브를 바꿈 → Expo Go(네이티브 고정) 불가 → dev client 빌드 필요
+- CNG(Continuous Native Generation): ios/android 폴더 미보유, `npx expo prebuild`로 생성
+- experiments: `typedRoutes`(라우트 경로 TS 검증) · `reactCompiler`(자동 메모이제이션)
+
+**tsconfig.json** — TypeScript 컴파일러 규칙
+- `extends: expo/tsconfig.base` — Expo 기본 설정 상속(baseUrl 등 포함), 차이만 덮어씀
+- `strict: true` — 엄격 검사 전체 ON (§2 meta 타입안전의 전제)
+- `paths` alias — `@/*`→`./src/*`, `@/assets/*`→`./assets/*` (상대경로 지옥 회피)
+  - 런타임도 동작: metro의 getDefaultConfig가 tsconfig paths를 자동으로 읽어 리졸버에 연결 (babel module-resolver 불필요)
+- `include`의 `.expo/types` = typedRoutes 자동생성 타입(app.json과 짝), `*-env.d.ts`=자동 선언
+
+#### DOING
 - metro.config.js — Expo 번들러 설정. NativeWind 연결 + `.sql` 확장자 허용.
+
+#### REST
 - postcss.config.mjs — Tailwind v4 PostCSS 플러그인.
 - src/global.css — Tailwind/NativeWind 스타일 진입점 + 전역 폰트 토큰.
 - drizzle.config.ts — SQLite/Expo용 Drizzle 설정. `src/db/schema.ts`로 이어짐.

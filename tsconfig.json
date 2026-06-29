@@ -1,21 +1,21 @@
 {
+  // Expo가 만든 기본 tsconfig를 상속: node_modules/expo/tsconfig.base.json
+  // RN/Expo에 맞는 target, module, jsx: react-jsx, moduleResolution, baseUrl: "." 등
   "extends": "expo/tsconfig.base",
   "compilerOptions": {
     "strict": true,
+    // paths alias가 동작하려면 baseUrl이 필요하지만, `.base`에서 이미 정의됨
     "paths": {
-      "@/*": [
-        "./src/*"
-      ],
-      "@/assets/*": [
-        "./assets/*"
-      ]
-    }
+      "@/*": ["./src/*"],
+      "@/assets/*": ["./assets/*"],
+    },
   },
   "include": [
     "**/*.ts",
     "**/*.tsx",
+    // app.json의 typedRoutes: true가 실제 동작하기 위해선 해당 결과물을 타입 타겟에 포함
     ".expo/types/**/*.ts",
     "expo-env.d.ts",
-    "nativewind-env.d.ts"
-  ]
+    "nativewind-env.d.ts",
+  ],
 }
