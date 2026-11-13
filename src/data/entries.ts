@@ -1,6 +1,7 @@
 import * as Crypto from "expo-crypto";
 import { and, desc, eq, exists, inArray, ne, notInArray, or, sql, type SQL } from "drizzle-orm";
 
+import { notifyDbChanged } from "@/db/changes";
 import { db } from "@/db/client";
 import { entries, entryTags, tags } from "@/db/schema";
 import {
@@ -189,6 +190,7 @@ export function createEntry(input: EntryInput): string {
       .run();
     setEntryTags(tx, id, input.tags ?? []);
   });
+  notifyDbChanged();
   return id;
 }
 
@@ -200,10 +202,12 @@ export function updateEntry(id: string, input: Partial<EntryInput>) {
       .run();
     if (input.tags) setEntryTags(tx, id, input.tags);
   });
+  notifyDbChanged();
 }
 
 export function setFavorite(id: string, favorite: boolean) {
   db.update(entries).set({ favorite, updatedAt: new Date() }).where(eq(entries.id, id)).run();
+  notifyDbChanged();
 }
 
 export function deleteEntry(id: string) {
@@ -211,6 +215,7 @@ export function deleteEntry(id: string) {
     tx.delete(entries).where(eq(entries.id, id)).run();
     setEntryTags(tx, id, []);
   });
+  notifyDbChanged();
 }
 
 export type ImportResult = { added: number; updated: number; skipped: number };
@@ -238,5 +243,6 @@ export function importEntries(items: EntryWithTags[]): ImportResult {
       setEntryTags(tx, item.id, tagNames);
     }
   });
+  notifyDbChanged();
   return result;
 }
