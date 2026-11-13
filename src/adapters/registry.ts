@@ -1,3 +1,4 @@
+import { articleAdapter } from "@/adapters/article";
 import { kakaoBookAdapter } from "@/adapters/kakao-book";
 import { tmdbMovieAdapter, tmdbTvAdapter } from "@/adapters/tmdb";
 import { STRONG_ID_KEYS, type SearchResult, type SourceAdapter } from "@/adapters/types";
@@ -5,23 +6,28 @@ import { youtubeAdapter } from "@/adapters/youtube";
 import type { Entry, EntryType } from "@/domain/entry";
 import type { ParsedLink } from "@/domain/link";
 
-/** One adapter per type for now; article (OG parsing via proxy) comes later. */
+/** One adapter per type for now. */
 const ADAPTERS: Partial<Record<EntryType, SourceAdapter>> = {
   movie: tmdbMovieAdapter,
   tv: tmdbTvAdapter,
   book: kakaoBookAdapter,
   youtube: youtubeAdapter,
+  article: articleAdapter,
 };
+
+/** Types that support live title search. */
+export function canSearch(type: EntryType): boolean {
+  return !!ADAPTERS[type]?.search;
+}
 
 export function getAdapter(type: EntryType): SourceAdapter | undefined {
   return ADAPTERS[type];
 }
 
-/** Looks up a pasted YouTube/TMDB link. Returns null for other sites (articles need the proxy, Phase 2). */
+/** Looks up a pasted link: YouTube/TMDB by ID, any other site as an article via its Open Graph tags. */
 export async function resolveLink(link: ParsedLink): Promise<{ type: EntryType; result: SearchResult } | null> {
-  if (link.kind === "web") return null;
-  const type: EntryType = link.kind === "youtube" ? "youtube" : link.mediaType;
-  const id = link.kind === "youtube" ? link.videoId : link.id;
+  const type: EntryType = link.kind === "youtube" ? "youtube" : link.kind === "tmdb" ? link.mediaType : "article";
+  const id = link.kind === "youtube" ? link.videoId : link.kind === "tmdb" ? link.id : link.url;
   const result = await getAdapter(type)?.lookup?.(id);
   return result ? { type, result } : null;
 }

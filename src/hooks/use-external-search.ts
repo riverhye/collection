@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-import { getAdapter } from "@/adapters/registry";
+import { canSearch, getAdapter } from "@/adapters/registry";
 import type { SearchResult } from "@/adapters/types";
 import type { EntryType } from "@/domain/entry";
 
@@ -13,7 +13,7 @@ type Fetched = { key: string; term: string; groups: ResultGroup[] };
  * when the query changes. While a new query loads, previous results for the same types stay visible.
  */
 export function useExternalSearch(types: EntryType[], query: string, enabled: boolean) {
-  const key = types.filter((t) => getAdapter(t)).join(",");
+  const key = types.filter(canSearch).join(",");
   const term = query.trim();
   const active = enabled && key !== "" && term !== "";
   const [fetched, setFetched] = useState<Fetched | null>(null);
@@ -24,7 +24,7 @@ export function useExternalSearch(types: EntryType[], query: string, enabled: bo
     const timer = setTimeout(() => {
       const searches = (key.split(",") as EntryType[]).map((type) =>
         getAdapter(type)!
-          .search(term, controller.signal)
+          .search!(term, controller.signal)
           .then(
             (results): ResultGroup => ({ type, results, error: null }),
             (e: Error): ResultGroup => ({ type, results: [], error: e.message }),

@@ -2,7 +2,7 @@ import { Link, router, Stack } from "expo-router";
 import { useState } from "react";
 import { ActivityIndicator, Keyboard, Pressable, ScrollView, Text, View } from "react-native";
 
-import { getAdapter, resolveLink } from "@/adapters/registry";
+import { canSearch, getAdapter, resolveLink } from "@/adapters/registry";
 import { STRONG_ID_KEYS, type SearchResult } from "@/adapters/types";
 import { draftToInput, emptyDraft, EntryForm, metaToStrings, type EntryDraft } from "@/components/entry-form";
 import { SearchResults } from "@/components/search-results";
@@ -32,7 +32,7 @@ export default function NewEntryScreen() {
   // 기타 (the default) searches movies, TV and books at once; a type chip narrows it to one source.
   // YouTube is opt-in because its search quota is ~100 queries/day.
   const unified = draft.type === "etc";
-  const searchTypes: EntryType[] = unified ? ["movie", "tv", "book"] : getAdapter(draft.type) ? [draft.type] : [];
+  const searchTypes: EntryType[] = unified ? ["movie", "tv", "book"] : canSearch(draft.type) ? [draft.type] : [];
   const searching = searchTypes.length > 0 && !picked && !manual && !looksLikeLink(draft.title);
   const search = useExternalSearch(searchTypes, draft.title, searching);
   const sameTitle = useDbQuery(() => findSameTitle(draft.title));
@@ -88,11 +88,7 @@ export default function NewEntryScreen() {
     }
     setManual(true);
     setDraft({ ...base, type: link.kind === "web" ? "article" : base.type, url: link.url, title: "" });
-    setLinkNote(
-      link.kind === "web"
-        ? "링크를 저장했어요. 제목을 입력하세요."
-        : "링크에서 정보를 가져오지 못했어요. 제목을 입력하세요.",
-    );
+    setLinkNote("링크에서 정보를 가져오지 못했어요. 링크는 저장했으니 제목을 입력하세요.");
   };
 
   const applyResult = (full: SearchResult, type: EntryType, base: EntryDraft) => {
