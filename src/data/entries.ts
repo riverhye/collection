@@ -212,3 +212,31 @@ export function deleteEntry(id: string) {
     setEntryTags(tx, id, []);
   });
 }
+
+export type ImportResult = { added: number; updated: number; skipped: number };
+
+/**
+ * Restores entries from a backup by ID. New IDs are added; for existing ones the more recently
+ * updated version wins, so importing an old backup never overwrites newer edits.
+ */
+export function importEntries(items: EntryWithTags[]): ImportResult {
+  const result: ImportResult = { added: 0, updated: 0, skipped: 0 };
+  db.transaction((tx) => {
+    for (const { tags: tagNames, ...item } of items) {
+      const existing = tx.select({ updatedAt: entries.updatedAt }).from(entries).where(eq(entries.id, item.id)).get();
+      const columns = { ...item, normalizedUrl: item.url ? normalizeUrl(item.url) : null };
+      if (!existing) {
+        tx.insert(entries).values(columns).run();
+        result.added++;
+      } else if (item.updatedAt > existing.updatedAt) {
+        tx.update(entries).set(columns).where(eq(entries.id, item.id)).run();
+        result.updated++;
+      } else {
+        result.skipped++;
+        continue;
+      }
+      setEntryTags(tx, item.id, tagNames);
+    }
+  });
+  return result;
+}

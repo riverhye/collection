@@ -24,3 +24,14 @@ export function getListView(): ListView {
 export function setListView(view: ListView) {
   Storage.setItemSync(LIST_VIEW_KEY, view);
 }
+
+const LAST_BACKUP_KEY = "settings.lastBackupAt";
+
+export function getLastBackupAt(): Date | null {
+  const value = Storage.getItemSync(LAST_BACKUP_KEY);
+  return value ? new Date(value) : null;
+}
+
+export function setLastBackupAt(date: Date) {
+  Storage.setItemSync(LAST_BACKUP_KEY, date.toISOString());
+}
