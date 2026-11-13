@@ -13,6 +13,8 @@ export type SearchResult = {
 
 export interface SourceAdapter {
   search(query: string, signal: AbortSignal): Promise<SearchResult[]>;
+  /** Fetches one item by its external ID (pasted link), already including details. */
+  lookup?(externalId: string): Promise<SearchResult | null>;
   /** Fills fields the search response lacks (director, runtime, duration). Called once when a result is picked. */
   details?(result: SearchResult): Promise<SearchResult>;
   /** Fetched when the detail screen opens; not stored (PLAN §2 summary rule). */

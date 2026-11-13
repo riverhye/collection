@@ -1,5 +1,7 @@
 // Domain types. No React Native imports here.
 
+import { parseLink } from "./link";
+
 export const ENTRY_TYPES = ["movie", "tv", "youtube", "book", "article", "etc"] as const;
 export type EntryType = (typeof ENTRY_TYPES)[number];
 
@@ -52,8 +54,13 @@ export type EntryInput = {
   tags?: string[];
 };
 
-/** Strong-identifier form of a URL for dedup: lowercased host, no www./m., no tracking params, no trailing slash. */
+/**
+ * Strong-identifier form of a URL for dedup: lowercased host, no www./m., no tracking params, no trailing slash.
+ * YouTube and TMDB links collapse to one canonical form (youtu.be/X and watch?v=X&t=30 match).
+ */
 export function normalizeUrl(raw: string): string | null {
+  const link = parseLink(raw);
+  if (link && link.kind !== "web") return link.url.replace("://www.", "://");
   let url: URL;
   try {
     url = new URL(raw.trim());

@@ -6,7 +6,8 @@ type SearchItem = {
   id: { videoId: string };
   snippet: { title: string; channelTitle: string; publishedAt: string; thumbnails: { medium?: { url: string } } };
 };
-type VideoItem = { contentDetails?: { duration: string }; snippet?: { description: string } };
+type Snippet = SearchItem["snippet"];
+type VideoItem = { id: string; contentDetails?: { duration: string }; snippet?: Snippet & { description: string } };
 
 function key() {
   return requireKey(process.env.EXPO_PUBLIC_YOUTUBE_API_KEY, "YouTube");
@@ -34,23 +35,35 @@ function video(id: unknown, part: string, signal?: AbortSignal) {
   return getJson<{ items: VideoItem[] }>(`${BASE}/videos?part=${part}&id=${id}&key=${key()}`, { signal });
 }
 
+function toResult(videoId: string, snippet: Snippet): SearchResult {
+  const channel = decodeEntities(snippet.channelTitle);
+  return {
+    externalId: videoId,
+    title: decodeEntities(snippet.title),
+    subtitle: [channel, snippet.publishedAt.slice(0, 10)].join(" · "),
+    thumbnail: snippet.thumbnails.medium?.url ?? null,
+    url: `https://www.youtube.com/watch?v=${videoId}`,
+    meta: { videoId, channel, publishedAt: snippet.publishedAt.slice(0, 10) },
+  };
+}
+
 export const youtubeAdapter: SourceAdapter = {
   async search(query, signal) {
     const data = await getJson<{ items: SearchItem[] }>(
       `${BASE}/search?part=snippet&type=video&maxResults=15&q=${encodeURIComponent(query)}&key=${key()}`,
       { signal },
     );
-    return data.items.map(({ id, snippet }): SearchResult => {
-      const channel = decodeEntities(snippet.channelTitle);
-      return {
-        externalId: id.videoId,
-        title: decodeEntities(snippet.title),
-        subtitle: [channel, snippet.publishedAt.slice(0, 10)].join(" · "),
-        thumbnail: snippet.thumbnails.medium?.url ?? null,
-        url: `https://www.youtube.com/watch?v=${id.videoId}`,
-        meta: { videoId: id.videoId, channel, publishedAt: snippet.publishedAt.slice(0, 10) },
-      };
-    });
+    return data.items.map(({ id, snippet }) => toResult(id.videoId, snippet));
+  },
+
+  async lookup(videoId) {
+    // videos.list costs 1 quota unit (search costs 100).
+    const data = await video(videoId, "snippet,contentDetails");
+    const item = data.items[0];
+    if (!item?.snippet) return null;
+    const result = toResult(videoId, item.snippet);
+    const iso = item.contentDetails?.duration;
+    return { ...result, meta: { ...result.meta, duration: iso ? parseIsoDuration(iso) : undefined } };
   },
 
   async details(result) {

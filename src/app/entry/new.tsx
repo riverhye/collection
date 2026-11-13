@@ -2,13 +2,14 @@ import { Link, router, Stack } from "expo-router";
 import { useState } from "react";
 import { ActivityIndicator, Keyboard, Pressable, ScrollView, Text, View } from "react-native";
 
-import { getAdapter } from "@/adapters/registry";
+import { getAdapter, resolveLink } from "@/adapters/registry";
 import { STRONG_ID_KEYS, type SearchResult } from "@/adapters/types";
 import { draftToInput, emptyDraft, EntryForm, metaToStrings, type EntryDraft } from "@/components/entry-form";
 import { SearchResults } from "@/components/search-results";
 import { TypeTile } from "@/components/type-tile";
 import { createEntry, findByExternalId, findByUrl, findSameTitle } from "@/data/entries";
 import { ENTRY_TYPE_LABELS, type EntryInput, type EntryType } from "@/domain/entry";
+import { looksLikeLink, parseLink } from "@/domain/link";
 import { useDbQuery } from "@/hooks/use-db-query";
 import { useExternalSearch } from "@/hooks/use-external-search";
 
@@ -26,12 +27,13 @@ export default function NewEntryScreen() {
   const [picked, setPicked] = useState<SearchResult | null>(null);
   const [manual, setManual] = useState(false);
   const [picking, setPicking] = useState(false);
+  const [linkNote, setLinkNote] = useState<string | null>(null);
 
   // 기타 (the default) searches movies, TV and books at once; a type chip narrows it to one source.
   // YouTube is opt-in because its search quota is ~100 queries/day.
   const unified = draft.type === "etc";
   const searchTypes: EntryType[] = unified ? ["movie", "tv", "book"] : getAdapter(draft.type) ? [draft.type] : [];
-  const searching = searchTypes.length > 0 && !picked && !manual;
+  const searching = searchTypes.length > 0 && !picked && !manual && !looksLikeLink(draft.title);
   const search = useExternalSearch(searchTypes, draft.title, searching);
   const sameTitle = useDbQuery(() => findSameTitle(draft.title));
   const canSave = draft.title.trim() !== "";
@@ -41,7 +43,9 @@ export default function NewEntryScreen() {
       setPicked(null);
       setManual(false);
     }
+    setLinkNote(null);
     setDraft(next);
+    if (next.title !== draft.title && looksLikeLink(next.title)) addFromLink(next);
   };
 
   // Existing entry: go there instead; it offers "다른 작품이에요" to save this draft separately.
@@ -61,8 +65,39 @@ export default function NewEntryScreen() {
     } finally {
       setPicking(false);
     }
+    applyResult(full, type, draft);
+  };
+
+  /** A link pasted into the title box: YouTube/TMDB links fill everything; other sites keep the URL. */
+  const addFromLink = async (base: EntryDraft) => {
+    const link = parseLink(base.title);
+    if (!link) return;
+    Keyboard.dismiss();
+    setPicking(true);
+    let resolved: Awaited<ReturnType<typeof resolveLink>> = null;
+    try {
+      resolved = await resolveLink(link);
+    } catch {
+      // Fall through to keeping the URL.
+    } finally {
+      setPicking(false);
+    }
+    if (resolved) {
+      applyResult(resolved.result, resolved.type, base);
+      return;
+    }
+    setManual(true);
+    setDraft({ ...base, type: link.kind === "web" ? "article" : base.type, url: link.url, title: "" });
+    setLinkNote(
+      link.kind === "web"
+        ? "링크를 저장했어요. 제목을 입력하세요."
+        : "링크에서 정보를 가져오지 못했어요. 제목을 입력하세요.",
+    );
+  };
+
+  const applyResult = (full: SearchResult, type: EntryType, base: EntryDraft) => {
     const next: EntryDraft = {
-      ...draft,
+      ...base,
       type,
       title: full.title,
       url: full.url ?? "",
@@ -138,9 +173,10 @@ export default function NewEntryScreen() {
           autoFocusTitle
           startCollapsed
           forceExpanded={!!picked}
-          titlePlaceholder={searchTypes.length > 0 && !picked ? "제목으로 검색" : undefined}
+          titlePlaceholder={searchTypes.length > 0 && !picked ? "제목으로 검색 또는 링크 붙여넣기" : undefined}
           titleAccessory={
             <>
+              {linkNote && <Text className="text-sm text-zinc-500">{linkNote}</Text>}
               {sameTitleHint}
               {picking && <ActivityIndicator className="py-2" />}
               {picked && (

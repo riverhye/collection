@@ -15,6 +15,14 @@ type SearchItem = {
   poster_path: string | null;
 };
 type Detail = {
+  id: number;
+  title?: string;
+  name?: string;
+  original_title?: string;
+  original_name?: string;
+  release_date?: string;
+  first_air_date?: string;
+  poster_path: string | null;
   overview: string;
   genres: { name: string }[];
   runtime?: number;
@@ -32,6 +40,29 @@ function detail(kind: Kind, id: unknown, language: string, signal?: AbortSignal)
   return getJson<Detail>(`${BASE}/${kind}/${id}?language=${language}${extra}`, { headers: headers(), signal });
 }
 
+function toResult(kind: Kind, item: SearchItem): SearchResult {
+  const title = item.title ?? item.name ?? "";
+  const original = item.original_title ?? item.original_name;
+  const year = Number((item.release_date ?? item.first_air_date ?? "").slice(0, 4)) || undefined;
+  return {
+    externalId: String(item.id),
+    title,
+    subtitle: [year, original !== title ? original : null].filter(Boolean).join(" · "),
+    thumbnail: item.poster_path ? `${IMAGE}${item.poster_path}` : null,
+    url: `https://www.themoviedb.org/${kind}/${item.id}`,
+    meta: { tmdbId: item.id, year },
+  };
+}
+
+function withDetails(kind: Kind, result: SearchResult, d: Detail): SearchResult {
+  const genres = d.genres.map((g) => g.name);
+  const extra =
+    kind === "movie"
+      ? { director: d.credits?.crew.find((c) => c.job === "Director")?.name, runtime: d.runtime || undefined }
+      : { seasons: d.number_of_seasons };
+  return { ...result, meta: { ...result.meta, genres, ...extra } };
+}
+
 function createTmdbAdapter(kind: Kind): SourceAdapter {
   return {
     async search(query, signal) {
@@ -39,29 +70,16 @@ function createTmdbAdapter(kind: Kind): SourceAdapter {
         `${BASE}/search/${kind}?language=ko-KR&query=${encodeURIComponent(query)}`,
         { headers: headers(), signal },
       );
-      return data.results.slice(0, 15).map((item): SearchResult => {
-        const title = item.title ?? item.name ?? "";
-        const original = item.original_title ?? item.original_name;
-        const year = Number((item.release_date ?? item.first_air_date ?? "").slice(0, 4)) || undefined;
-        return {
-          externalId: String(item.id),
-          title,
-          subtitle: [year, original !== title ? original : null].filter(Boolean).join(" · "),
-          thumbnail: item.poster_path ? `${IMAGE}${item.poster_path}` : null,
-          url: `https://www.themoviedb.org/${kind}/${item.id}`,
-          meta: { tmdbId: item.id, year },
-        };
-      });
+      return data.results.slice(0, 15).map((item) => toResult(kind, item));
+    },
+
+    async lookup(externalId) {
+      const d = await detail(kind, externalId, "ko-KR");
+      return withDetails(kind, toResult(kind, d), d);
     },
 
     async details(result) {
-      const d = await detail(kind, result.externalId, "ko-KR");
-      const genres = d.genres.map((g) => g.name);
-      const extra =
-        kind === "movie"
-          ? { director: d.credits?.crew.find((c) => c.job === "Director")?.name, runtime: d.runtime || undefined }
-          : { seasons: d.number_of_seasons };
-      return { ...result, meta: { ...result.meta, genres, ...extra } };
+      return withDetails(kind, result, await detail(kind, result.externalId, "ko-KR"));
     },
 
     async summary(meta, signal) {
