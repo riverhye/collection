@@ -1,6 +1,17 @@
 import { Link } from "expo-router";
-import { useState } from "react";
-import { FlatList, Pressable, ScrollView, Text, TextInput, useColorScheme, useWindowDimensions, View } from "react-native";
+import { useRef, useState } from "react";
+import {
+  FlatList,
+  Pressable,
+  ScrollView,
+  Text,
+  TextInput,
+  useColorScheme,
+  useWindowDimensions,
+  View,
+  type ScrollViewInstance,
+} from "react-native";
+import { GestureDetector, usePanGesture } from "react-native-gesture-handler";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { Chip } from "@/components/chip";
@@ -21,6 +32,10 @@ const VIEWS: { view: ListView; icon: IconName; label: string }[] = [
   { view: "grid", icon: ICONS.grid, label: "그리드" },
   { view: "calendar", icon: ICONS.calendar, label: "캘린더" },
 ];
+/** Swiping the list steps through these, same as tapping the type chips (null = 전체). */
+const TYPE_ORDER: (EntryType | null)[] = [null, ...ENTRY_TYPES];
+const SWIPE_DISTANCE = 60;
+const SWIPE_VELOCITY = 500;
 const GRID_COLUMNS = 3;
 const GRID_GAP = 12;
 const SIDE_PADDING = 16;
@@ -37,13 +52,44 @@ export default function CollectionScreen() {
   const [dateRange, setDateRange] = useState<DateRange | null>(null);
   const [showDateFilter, setShowDateFilter] = useState(false);
 
+  const chipScroll = useRef<ScrollViewInstance>(null);
+  const chipX = useRef(new Map<EntryType | null, number>());
+
+  const selectType = (next: EntryType | null) => {
+    setType(next);
+    // Keep the selected chip in view when the change came from a swipe.
+    const x = chipX.current.get(next);
+    if (x != null) chipScroll.current?.scrollTo({ x: Math.max(0, x - 48), animated: true });
+  };
+
+  // Horizontal swipe on the list = tap the next/previous type chip. Vertical moves fail it, so scrolling still works.
+  const swipe = usePanGesture({
+    activeOffsetX: [-25, 25],
+    failOffsetY: [-15, 15],
+    runOnJS: true,
+    onDeactivate: (e) => {
+      if (e.canceled) return;
+      if (Math.abs(e.translationX) < SWIPE_DISTANCE && Math.abs(e.velocityX) < SWIPE_VELOCITY) return;
+      const i = TYPE_ORDER.indexOf(type);
+      const next = TYPE_ORDER[i + (e.translationX < 0 ? 1 : -1)];
+      if (next !== undefined) selectType(next);
+    },
+  });
+
   const items = useDbQuery(() =>
-    listEntries({ search, type, favoriteOnly, tagNames, tagMode, dateFrom: dateRange?.from, dateTo: dateRange?.to }),
+    listEntries({
+      search,
+      type,
+      favoriteOnly,
+      tagNames,
+      tagMode,
+      dateFrom: dateRange?.from,
+      dateTo: dateRange?.to,
+    }),
   );
   const allTags = useDbQuery(listTags);
 
-  const filtering =
-    search.trim() !== "" || type !== null || favoriteOnly || tagNames.length > 0 || dateRange !== null;
+  const filtering = search.trim() !== "" || type !== null || favoriteOnly || tagNames.length > 0 || dateRange !== null;
   const toggleTag = (name: string) =>
     setTagNames((prev) => (prev.includes(name) ? prev.filter((t) => t !== name) : [...prev, name]));
   const chooseView = (next: ListView) => {
@@ -56,23 +102,29 @@ export default function CollectionScreen() {
   const header = (
     <>
       <ScrollView
+        ref={chipScroll}
         horizontal
         showsHorizontalScrollIndicator={false}
         className="max-h-12 flex-grow-0"
-        contentContainerClassName="items-center gap-2 px-4 py-2">
+        contentContainerClassName="items-center gap-2 px-4 py-2"
+      >
         <Chip label="♥" selected={favoriteOnly} onPress={() => setFavoriteOnly((v) => !v)} />
         <Chip
           label={dateRange ? `${dateRange.from.slice(2)} ~ ${dateRange.to.slice(2)}` : "기간"}
           selected={dateRange !== null || showDateFilter}
           onPress={() => setShowDateFilter((v) => !v)}
         />
+        <View onLayout={(e) => chipX.current.set(null, e.nativeEvent.layout.x)}>
+          <Chip label="전체" selected={type === null} onPress={() => selectType(null)} />
+        </View>
         {ENTRY_TYPES.map((t) => (
-          <Chip
-            key={t}
-            label={ENTRY_TYPE_LABELS[t]}
-            selected={type === t}
-            onPress={() => setType((cur) => (cur === t ? null : t))}
-          />
+          <View key={t} onLayout={(e) => chipX.current.set(t, e.nativeEvent.layout.x)}>
+            <Chip
+              label={ENTRY_TYPE_LABELS[t]}
+              selected={type === t}
+              onPress={() => selectType(type === t ? null : t)}
+            />
+          </View>
         ))}
         {allTags.length > 0 && <View className="mx-1 h-5 w-px bg-zinc-300 dark:bg-zinc-700" />}
         {tagNames.length > 1 && (
@@ -117,7 +169,8 @@ export default function CollectionScreen() {
                 onPress={() => chooseView(v.view)}
                 accessibilityLabel={v.label}
                 accessibilityState={{ selected: view === v.view }}
-                className={`rounded-md px-2.5 py-1.5 ${view === v.view ? "bg-white dark:bg-zinc-700" : ""}`}>
+                className={`rounded-md px-2.5 py-1.5 ${view === v.view ? "bg-white dark:bg-zinc-700" : ""}`}
+              >
                 <Icon name={v.icon} size={16} color={view === v.view ? undefined : "#8B8D98"} />
               </Pressable>
             ))}
@@ -137,39 +190,45 @@ export default function CollectionScreen() {
         </View>
       </View>
 
-      {view === "calendar" ? (
-        <ScrollView
-          keyboardDismissMode="on-drag"
-          contentInsetAdjustmentBehavior="automatic"
-          contentContainerStyle={{ paddingBottom: bottomPadding }}>
-          {header}
-          <EntryCalendar entries={items} width={width - 16} />
-        </ScrollView>
-      ) : (
-        <FlatList
-          // numColumns can't change on a mounted FlatList, so remount per view.
-          key={view}
-          data={items}
-          keyExtractor={(item) => item.id}
-          numColumns={view === "grid" ? GRID_COLUMNS : 1}
-          columnWrapperStyle={view === "grid" ? { gap: GRID_GAP, paddingHorizontal: SIDE_PADDING } : undefined}
-          renderItem={({ item }) =>
-            view === "grid" ? <EntryTile entry={item} width={tileWidth} /> : <EntryRow entry={item} />
-          }
-          ListHeaderComponent={header}
-          ItemSeparatorComponent={view === "grid" ? () => <View style={{ height: GRID_GAP + 4 }} /> : undefined}
-          keyboardDismissMode="on-drag"
-          contentInsetAdjustmentBehavior="automatic"
-          contentContainerStyle={{ paddingBottom: bottomPadding }}
-          ListEmptyComponent={empty}
-        />
-      )}
+      {header}
+
+      <GestureDetector gesture={swipe}>
+        <View className="flex-1">
+          {view === "calendar" ? (
+            <ScrollView
+              keyboardDismissMode="on-drag"
+              contentInsetAdjustmentBehavior="automatic"
+              contentContainerStyle={{ paddingBottom: bottomPadding }}
+            >
+              <EntryCalendar entries={items} width={width - 16} />
+            </ScrollView>
+          ) : (
+            <FlatList
+              // numColumns can't change on a mounted FlatList, so remount per view.
+              key={view}
+              data={items}
+              keyExtractor={(item) => item.id}
+              numColumns={view === "grid" ? GRID_COLUMNS : 1}
+              columnWrapperStyle={view === "grid" ? { gap: GRID_GAP, paddingHorizontal: SIDE_PADDING } : undefined}
+              renderItem={({ item }) =>
+                view === "grid" ? <EntryTile entry={item} width={tileWidth} /> : <EntryRow entry={item} />
+              }
+              ItemSeparatorComponent={view === "grid" ? () => <View style={{ height: GRID_GAP + 4 }} /> : undefined}
+              keyboardDismissMode="on-drag"
+              contentInsetAdjustmentBehavior="automatic"
+              contentContainerStyle={{ paddingBottom: bottomPadding }}
+              ListEmptyComponent={empty}
+            />
+          )}
+        </View>
+      </GestureDetector>
 
       <Link href="/entry/new" asChild>
         <Pressable
           accessibilityLabel="추가"
           className="absolute right-5 h-14 w-14 items-center justify-center rounded-full bg-zinc-900 shadow-lg active:opacity-80 dark:bg-zinc-100"
-          style={{ bottom: BottomTabInset + 20 }}>
+          style={{ bottom: BottomTabInset + 20 }}
+        >
           <Icon name={ICONS.add} size={24} color={scheme === "dark" ? "#1C2024" : "#FFFFFF"} />
         </Pressable>
       </Link>
