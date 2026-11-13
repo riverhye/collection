@@ -25,3 +25,24 @@ export const META_FIELDS: Record<EntryType, MetaField[]> = {
   ],
   etc: [],
 };
+
+function formatDuration(seconds: number) {
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = seconds % 60;
+  const mmss = `${String(m).padStart(h ? 2 : 1, "0")}:${String(s).padStart(2, "0")}`;
+  return h ? `${h}:${mmss}` : mmss;
+}
+
+/** Label/value rows for the detail screen's info section. */
+export function metaRows(type: EntryType, meta: Record<string, unknown>): { label: string; value: string }[] {
+  const rows = META_FIELDS[type]
+    .filter((f) => f.key !== "summary" && meta[f.key] != null && meta[f.key] !== "")
+    .map((f) => ({ label: f.label, value: String(meta[f.key]) }));
+  if (Array.isArray(meta.genres) && meta.genres.length > 0) rows.push({ label: "장르", value: meta.genres.join(", ") });
+  if (typeof meta.duration === "number") rows.push({ label: "길이", value: formatDuration(meta.duration) });
+  if (typeof meta.pubDate === "string") rows.push({ label: "출간일", value: meta.pubDate });
+  if (typeof meta.publishedAt === "string") rows.push({ label: "게시일", value: meta.publishedAt });
+  if (typeof meta.isbn === "string") rows.push({ label: "ISBN", value: meta.isbn });
+  return rows;
+}

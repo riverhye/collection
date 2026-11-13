@@ -3,15 +3,16 @@ import * as WebBrowser from "expo-web-browser";
 import { useState } from "react";
 import { Alert, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 
-import { Chip } from "@/components/chip";
 import { draftFromEntry, draftToInput, EntryForm, type EntryDraft } from "@/components/entry-form";
 import { Icon, ICONS } from "@/components/icon";
+import { TagInput } from "@/components/tag-input";
 import { TypeTile } from "@/components/type-tile";
 import { createEntry, deleteEntry, getEntry, setFavorite, updateEntry } from "@/data/entries";
 import { getDetailMode } from "@/data/settings";
-import { ENTRY_TYPE_LABELS, parseTags, type EntryInput, type EntryWithTags } from "@/domain/entry";
-import { META_FIELDS } from "@/domain/meta-fields";
+import { ENTRY_TYPE_LABELS, type EntryInput, type EntryWithTags } from "@/domain/entry";
+import { metaRows } from "@/domain/meta-fields";
 import { useDbQuery } from "@/hooks/use-db-query";
+import { useSummary } from "@/hooks/use-summary";
 
 function HeaderButton({ label, onPress, bold }: { label: string; onPress: () => void; bold?: boolean }) {
   return (
@@ -37,6 +38,7 @@ export default function EntryScreen() {
   const entry = useDbQuery(() => getEntry(id));
   const [editing, setEditing] = useState(() => getDetailMode() === "edit");
   const [draft, setDraft] = useState<EntryDraft | null>(() => (entry ? draftFromEntry(entry) : null));
+  const summary = useSummary(entry);
 
   if (!entry) {
     return (
@@ -86,6 +88,7 @@ export default function EntryScreen() {
         className="flex-1 bg-white dark:bg-black"
         contentContainerClassName="gap-8 p-4 pb-16"
         keyboardShouldPersistTaps="handled"
+        contentInsetAdjustmentBehavior="automatic"
         automaticallyAdjustKeyboardInsets>
         {duplicateDraft && !editing && (
           <Pressable
@@ -94,27 +97,24 @@ export default function EntryScreen() {
             <Text className="text-sm font-medium text-zinc-900 dark:text-zinc-100">다른 작품이에요 · 새로 저장</Text>
           </Pressable>
         )}
-        {editing && draft ? <EntryForm draft={draft} onChange={setDraft} /> : <EntryView entry={entry} onDelete={confirmDelete} />}
+        {editing && draft ? <EntryForm draft={draft} onChange={setDraft} /> : <EntryView entry={entry} summary={summary} onDelete={confirmDelete} />}
       </ScrollView>
     </>
   );
 }
 
-function EntryView({ entry, onDelete }: { entry: EntryWithTags; onDelete: () => void }) {
-  const [tagInput, setTagInput] = useState("");
+function EntryView({
+  entry,
+  summary,
+  onDelete,
+}: {
+  entry: EntryWithTags;
+  summary: string | null;
+  onDelete: () => void;
+}) {
   const [memo, setMemo] = useState(entry.memo ?? "");
-  const meta = (entry.meta ?? {}) as Record<string, unknown>;
-  const metaRows = META_FIELDS[entry.type]
-    .filter((f) => f.key !== "summary" && meta[f.key] != null && meta[f.key] !== "")
-    .map((f) => ({ label: f.label, value: String(meta[f.key]) }));
-  const summary = typeof meta.summary === "string" ? meta.summary : null;
+  const rows = metaRows(entry.type, (entry.meta ?? {}) as Record<string, unknown>);
 
-  const addTags = () => {
-    const added = parseTags(tagInput);
-    if (added.length > 0) updateEntry(entry.id, { tags: [...new Set([...entry.tags, ...added])] });
-    setTagInput("");
-  };
-  const removeTag = (name: string) => updateEntry(entry.id, { tags: entry.tags.filter((t) => t !== name) });
   const saveMemo = () => {
     if (memo.trim() !== (entry.memo ?? "")) updateEntry(entry.id, { memo: memo.trim() || null });
   };
@@ -143,22 +143,7 @@ function EntryView({ entry, onDelete }: { entry: EntryWithTags; onDelete: () => 
 
       {/* 내가 추가 */}
       <Section title="내 기록">
-        <View className="flex-row flex-wrap items-center gap-2">
-          {entry.tags.map((tag) => (
-            <Chip key={tag} label={`#${tag} ✕`} onPress={() => removeTag(tag)} />
-          ))}
-          <TextInput
-            value={tagInput}
-            onChangeText={setTagInput}
-            onSubmitEditing={addTags}
-            onBlur={addTags}
-            placeholder="+ 태그"
-            placeholderTextColor="#8B8D98"
-            autoCapitalize="none"
-            returnKeyType="done"
-            className="min-w-20 py-1.5 text-sm text-zinc-900 dark:text-zinc-100"
-          />
-        </View>
+        <TagInput value={entry.tags} onChange={(tags) => updateEntry(entry.id, { tags })} />
         <Text className="text-sm text-zinc-500">
           본 날 · {entry.experiencedDate ?? "기록 없음 (편집에서 추가)"}
         </Text>
@@ -176,7 +161,7 @@ function EntryView({ entry, onDelete }: { entry: EntryWithTags; onDelete: () => 
 
       {/* 외부 정보 */}
       <Section title="정보">
-        {metaRows.map((row) => (
+        {rows.map((row) => (
           <View key={row.label} className="flex-row gap-3">
             <Text className="w-24 text-sm text-zinc-500">{row.label}</Text>
             <Text selectable className="flex-1 text-sm text-zinc-900 dark:text-zinc-100">

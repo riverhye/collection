@@ -105,6 +105,17 @@ export function findByUrl(url: string | null | undefined): Entry | null {
   return row ? toEntry(row) : null;
 }
 
+/** Strong-identifier dedup by external ID stored in meta (tmdbId / isbn / videoId). */
+export function findByExternalId(type: EntryType, key: string, value: unknown): Entry | null {
+  if (value == null || value === "") return null;
+  const row = db
+    .select()
+    .from(entries)
+    .where(and(eq(entries.type, type), sql`json_extract(${entries.meta}, ${`$.${key}`}) = ${value}`))
+    .get();
+  return row ? toEntry(row) : null;
+}
+
 /** Weak dedup hint: entries whose title matches ignoring case and surrounding spaces. */
 export function findSameTitle(title: string, excludeId?: string): Entry[] {
   const key = title.trim().toLowerCase();

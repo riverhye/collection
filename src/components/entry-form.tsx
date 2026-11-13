@@ -3,10 +3,10 @@ import { ScrollView, Text, TextInput, View, type TextInputProps } from "react-na
 
 import { Chip } from "@/components/chip";
 import { DateField } from "@/components/date-field";
+import { TagInput } from "@/components/tag-input";
 import {
   ENTRY_TYPE_LABELS,
   ENTRY_TYPES,
-  parseTags,
   type EntryInput,
   type EntryType,
   type EntryWithTags,
@@ -18,27 +18,45 @@ export type EntryDraft = {
   title: string;
   source: string;
   url: string;
-  tags: string;
+  thumbnail: string;
+  tags: string[];
   experiencedDate: string | null;
   memo: string;
   meta: Record<string, string>;
 };
 
 export function emptyDraft(): EntryDraft {
-  return { type: "etc", title: "", source: "", url: "", tags: "", experiencedDate: null, memo: "", meta: {} };
+  return {
+    type: "etc",
+    title: "",
+    source: "",
+    url: "",
+    thumbnail: "",
+    tags: [],
+    experiencedDate: null,
+    memo: "",
+    meta: {},
+  };
+}
+
+/** Meta values as form strings; arrays/objects stay out of the form and survive via draftToInput's previousMeta. */
+export function metaToStrings(meta: object | null | undefined): Record<string, string> {
+  const strings: Record<string, string> = {};
+  for (const [key, value] of Object.entries(meta ?? {})) {
+    if (typeof value === "string" || typeof value === "number") strings[key] = String(value);
+  }
+  return strings;
 }
 
 export function draftFromEntry(entry: EntryWithTags): EntryDraft {
-  const meta: Record<string, string> = {};
-  for (const [key, value] of Object.entries(entry.meta ?? {})) {
-    if (typeof value === "string" || typeof value === "number") meta[key] = String(value);
-  }
+  const meta = metaToStrings(entry.meta);
   return {
     type: entry.type,
     title: entry.title,
     source: entry.source ?? "",
     url: entry.url ?? "",
-    tags: entry.tags.join(", "),
+    thumbnail: entry.thumbnail ?? "",
+    tags: entry.tags,
     experiencedDate: entry.experiencedDate,
     memo: entry.memo ?? "",
     meta,
@@ -58,7 +76,8 @@ export function draftToInput(draft: EntryDraft, previousMeta?: Record<string, un
     title: draft.title.trim(),
     source: draft.source.trim() || null,
     url: draft.url.trim() || null,
-    tags: parseTags(draft.tags),
+    thumbnail: draft.thumbnail.trim() || null,
+    tags: draft.tags,
     experiencedDate: draft.experiencedDate,
     memo: draft.memo.trim() || null,
     meta: Object.keys(meta).length > 0 ? meta : null,
@@ -92,30 +111,44 @@ type Props = {
   titleAccessory?: React.ReactNode;
   /** Quick add: show only type + title until the user asks for more. */
   startCollapsed?: boolean;
+  /** Show all fields regardless of startCollapsed (e.g. after picking a search result). */
+  forceExpanded?: boolean;
+  titlePlaceholder?: string;
 };
 
-export function EntryForm({ draft, onChange, autoFocusTitle, titleAccessory, startCollapsed }: Props) {
-  const [showDetails, setShowDetails] = useState(!startCollapsed);
+export function EntryForm({
+  draft,
+  onChange,
+  autoFocusTitle,
+  titleAccessory,
+  startCollapsed,
+  forceExpanded,
+  titlePlaceholder,
+}: Props) {
+  const [expanded, setExpanded] = useState(!startCollapsed);
+  const showDetails = expanded || forceExpanded;
   const set = <K extends keyof EntryDraft>(key: K, value: EntryDraft[K]) => onChange({ ...draft, [key]: value });
 
   return (
     <View className="gap-5">
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerClassName="gap-2">
-        {ENTRY_TYPES.map((type) => (
-          <Chip
-            key={type}
-            label={ENTRY_TYPE_LABELS[type]}
-            selected={draft.type === type}
-            onPress={() => set("type", type)}
-          />
-        ))}
-      </ScrollView>
+      <Field label="종류">
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerClassName="gap-2">
+          {ENTRY_TYPES.map((type) => (
+            <Chip
+              key={type}
+              label={ENTRY_TYPE_LABELS[type]}
+              selected={draft.type === type}
+              onPress={() => set("type", type)}
+            />
+          ))}
+        </ScrollView>
+      </Field>
 
       <Field label="제목">
         <Input
           value={draft.title}
           onChangeText={(v) => set("title", v)}
-          placeholder="제목 (필수)"
+          placeholder={titlePlaceholder ?? "제목 (필수)"}
           autoFocus={autoFocusTitle}
           returnKeyType="done"
         />
@@ -125,12 +158,7 @@ export function EntryForm({ draft, onChange, autoFocusTitle, titleAccessory, sta
       {showDetails ? (
         <>
           <Field label="태그">
-            <Input
-              value={draft.tags}
-              onChangeText={(v) => set("tags", v)}
-              placeholder="쉼표로 구분 (예: 인생작, 재관람)"
-              autoCapitalize="none"
-            />
+            <TagInput value={draft.tags} onChange={(v) => set("tags", v)} />
           </Field>
           <Field label="본 날">
             <DateField value={draft.experiencedDate} onChange={(v) => set("experiencedDate", v)} />
@@ -174,7 +202,7 @@ export function EntryForm({ draft, onChange, autoFocusTitle, titleAccessory, sta
           ))}
         </>
       ) : (
-        <Text onPress={() => setShowDetails(true)} className="text-base text-blue-600 dark:text-blue-400">
+        <Text onPress={() => setExpanded(true)} className="text-base text-blue-600 dark:text-blue-400">
           자세히 입력
         </Text>
       )}

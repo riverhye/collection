@@ -32,8 +32,9 @@ export default function RootLayout() {
     <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
       <Stack>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="entry/new" options={{ presentation: "modal", title: "추가" }} />
-        <Stack.Screen name="entry/[id]" options={{ title: "", headerBackTitle: "수집함" }} />
+        {/* iOS 26 headers are transparent by default and overlap content; solid headers keep the form below them. */}
+        <Stack.Screen name="entry/new" options={{ presentation: "modal", title: "추가", headerTransparent: false }} />
+        <Stack.Screen name="entry/[id]" options={{ title: "", headerBackTitle: "수집함", headerTransparent: false }} />
       </Stack>
     </ThemeProvider>
   );

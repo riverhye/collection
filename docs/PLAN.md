@@ -61,14 +61,14 @@ entry_tags  (entry_id, tag_id)            -- 조인. 태그 필터/자동완성/
 | movie | year, director, genres[], runtime | tmdbId | TMDB |
 | tv | year, seasons, genres[] | tmdbId | TMDB |
 | youtube | channel, duration, publishedAt | videoId | YouTube Data API |
-| book | author, publisher, pubDate, pageCount | isbn | 네이버책 |
+| book | author, publisher, pubDate, pageCount | isbn | 카카오 책 검색 |
 | article | siteName, author?, publishedAt?, **summary(저장)** | url | OG 파싱 |
 | etc | 자유 | — | 없음 |
 
 **규칙**
 - meta는 **타입별 TS 인터페이스**로 타입 안전 보장, 어댑터가 모양 책임 (저장 전 검증). 저장은 통합(JSON 한 칸), 모양은 타입별로 엄격.
 - meta는 **비정규화 스냅샷** — 항목마다 자기 복사본. 한 항목 수정해도 다른 항목에 파급 없음.
-- `summary`: 통일 필드명. 영화·TV·유튜브·책은 **저장 안 하고 상세 볼 때 외부ID로 fetch**(오프라인이면 안 뜸). `article`만 재조회 API가 없어 저장. 어댑터가 외부 필드(TMDB `overview` / 네이버 `description` / `og:description`)를 `summary`로 매핑.
+- `summary`: 통일 필드명. 영화·TV·유튜브·책은 **저장 안 하고 상세 볼 때 외부ID로 fetch**(오프라인이면 안 뜸). `article`만 재조회 API가 없어 저장. 어댑터가 외부 필드(TMDB `overview` / 카카오 `contents` / `og:description`)를 `summary`로 매핑.
 - 장르: meta.genres에만. 사용자 태그에 **자동 편입 안 함**. "장르 필터"는 태그와 별개 제공.
 - 변동값(viewCount·평점) 저장 안 함 (스냅샷이 금방 거짓이 됨).
 
@@ -89,7 +89,9 @@ entry_tags  (entry_id, tag_id)            -- 조인. 태그 필터/자동완성/
 - "둘러보기"(랜덤·1년 전 오늘)는 후순위.
 
 ### 추가(입력) 흐름
-**타입 먼저 선택**(칩 6개) → 타입별 맞춤 입력/조회. `기타`가 항상 탈출구. (DB는 title만 NOT NULL 유지)
+~~**타입 먼저 선택**(칩 6개) → 타입별 맞춤 입력/조회.~~
+→ (2026-11-13 변경) **바로 검색**: 타입 기본값(`기타`)에서 제목을 치면 영화·TV·책을 한 번에 검색(그룹별 4개), 고르면 타입 자동 지정. 타입 칩을 누르면 그 출처만 검색. 유튜브는 검색 쿼터(하루 ~100회) 때문에 "유튜브에서 찾기"로 명시적으로만. "직접 입력하기"는 항상 탈출구. (DB는 title만 NOT NULL 유지)
+- 태그 입력 = 칩 입력: Return/쉼표로 확정, 빈 칸에서 백스페이스로 마지막 삭제, 포커스 시 기존 태그 추천(사용 많은 순, 입력으로 필터) + "새로 만들기".
 
 ```
 [타입 선택] ── 영화·TV·책 → 제목 입력 → 외부DB 라이브 검색
@@ -114,7 +116,7 @@ entry_tags  (entry_id, tag_id)            -- 조인. 태그 필터/자동완성/
 - 결과 카드 = 썸네일 + 제목 + **보조줄**(영화: 연도·감독 / 책: 저자·출판사 / 유튜브: 채널).
 - 고르면 → 상세 편집 화면(meta 자동 채움) → 태그·메모·experienced_date 추가 → 저장.
 - **"직접 입력하기" 항상 노출** (검색 중에도, 결과 없을 때도). 검색은 거들 뿐 수동 항상 가능.
-- 타입당 어댑터 1개로 시작(책=네이버책). registry는 멀티 가능하게 짓되 호출은 우선순위 1개.
+- 타입당 어댑터 1개로 시작(책=카카오 책 검색). registry는 멀티 가능하게 짓되 호출은 우선순위 1개.
 
 ### 상세 / 편집 화면
 - 기본 **"보기뷰"**(깔끔한 정보카드) + 우상단 **"편집" 버튼** → 편집뷰(필드가 input). 설정에서 "기본: 보기/편집" 토글.
@@ -150,7 +152,7 @@ entry_tags  (entry_id, tag_id)            -- 조인. 태그 필터/자동완성/
 - 스타일링: NativeWind v5 (5.0.0-rc.1) + react-native-css (3.1.0-rc.1) + Tailwind v4, lightningcss 1.30.1 고정(overrides)
 - 데이터: expo-sqlite + **Drizzle ORM**
 - 카메라/OCR(3차): react-native-vision-camera / @react-native-ml-kit/text-recognition / expo-image-manipulator (vision-camera의 RN 0.85 호환 확인 필요)
-- 외부 DB: TMDB, 네이버 책 검색, YouTube Data API, Google Books
+- 외부 DB: TMDB, 카카오 책 검색 (2026-11-13: 네이버 검색 API는 신규 앱 등록 목록에 없음), YouTube Data API, Google Books(키 없이 가능, 백업)
 - Expo Go 불가(서드파티 네이티브 모듈) → **dev client 빌드** 사용
 
 ---
@@ -175,11 +177,13 @@ entry_tags  (entry_id, tag_id)            -- 조인. 태그 필터/자동완성/
 ## 7. 구현 순서
 
 1. **1차** — 항목 CRUD + 타입 선택 입력 + 태그/메모/날짜 수동입력 + 리스트/검색/필터 + 상세·편집 + dedup(제목/url) + **Drizzle 마이그레이션 셋업**
-2. **2차** — 외부 DB 조회(어댑터: TMDB·네이버책·YouTube·OG) + URL 파싱 + 공유시트 + 외부ID dedup + 새로고침
+2. **2차** — 외부 DB 조회(어댑터: TMDB·카카오책·YouTube·OG) + URL 파싱 + 공유시트 + 외부ID dedup + 새로고침
 3. **3차** — 카메라 + OCR 자동화
 
 **진행 (2026-11-13)** — 1차 대부분 구현: Drizzle 스키마·마이그레이션, 수집함(검색·타입/태그/♥ 필터·태그 AND/OR), 빠른 추가(타입→제목, "자세히 입력"), 상세(보기/편집·♥·태그/메모 바로 추가·삭제), dedup(URL 강한 식별자 / 같은 제목 힌트), 설정(상세 기본 모드).
 남은 1차: 그리드/캘린더 보기 토글, 기간(experienced_date) 필터.
+2차 진행: 타입별 라이브 검색(TMDB 영화·TV / 카카오 책 / YouTube, 300ms 디바운스) → 선택 시 상세 보강(감독·러닝타임·장르·시즌·영상 길이) + 외부ID dedup(json_extract) + 상세에서 summary 온디맨드 조회. 키는 개발용 `.env.local`(EXPO_PUBLIC_*) — 배포 전 프록시로 이전.
+남은 2차: 기사(OG 파싱, 프록시), URL 붙여넣기 파싱, 공유시트, 새로고침.
 
 ---
 
