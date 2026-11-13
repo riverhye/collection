@@ -145,9 +145,9 @@ entry_tags  (entry_id, tag_id)            -- 조인. 태그 필터/자동완성/
 - **가벼운 무상태 프록시 서버 도입** (EAS Hosting API routes 등): ① 외부 API 키 숨김(앱에 박지 않음), ② 기사 OG 파싱 견고하게 대행. **사용자 데이터는 저장 안 함.** → 배포 숙제 #2 해소.
 
 ### 확정 스택
-- React Native + Expo **SDK 56** (expo ~56.0.11, RN 0.85.3, React 19.2), TypeScript, Expo Router
+- React Native + Expo **SDK 58** (expo ~58.0.25, RN 0.88.1, React 19.3), TypeScript, Expo Router — 2026-11-13 56→58 업그레이드 (App Store Expo Go가 최신 SDK만 지원)
 - Node 22.22.3 고정
-- 스타일링: NativeWind v5 + react-native-css + Tailwind v4
+- 스타일링: NativeWind v5 (5.0.0-rc.1) + react-native-css (3.1.0-rc.1) + Tailwind v4, lightningcss 1.30.1 고정(overrides)
 - 데이터: expo-sqlite + **Drizzle ORM**
 - 카메라/OCR(3차): react-native-vision-camera / @react-native-ml-kit/text-recognition / expo-image-manipulator (vision-camera의 RN 0.85 호환 확인 필요)
 - 외부 DB: TMDB, 네이버 책 검색, YouTube Data API, Google Books
@@ -178,50 +178,12 @@ entry_tags  (entry_id, tag_id)            -- 조인. 태그 필터/자동완성/
 2. **2차** — 외부 DB 조회(어댑터: TMDB·네이버책·YouTube·OG) + URL 파싱 + 공유시트 + 외부ID dedup + 새로고침
 3. **3차** — 카메라 + OCR 자동화
 
+**진행 (2026-11-13)** — 1차 대부분 구현: Drizzle 스키마·마이그레이션, 수집함(검색·타입/태그/♥ 필터·태그 AND/OR), 빠른 추가(타입→제목, "자세히 입력"), 상세(보기/편집·♥·태그/메모 바로 추가·삭제), dedup(URL 강한 식별자 / 같은 제목 힌트), 설정(상세 기본 모드).
+남은 1차: 그리드/캘린더 보기 토글, 기간(experienced_date) 필터.
+
 ---
 
 ## 8. 미해결 / 다음 과제
-실제 개발 들어가기 전, 모든 설정 파일을 하나씩 공부 및 이해한 후에 진행할 것.
-
-### 설정 파일 공부 순서
-바깥 지도 → 앱 정체성 → 코드 처리 파이프라인 → 데이터 설정 순으로 본다.
-
-#### DONE
-
-**babel.config.js** — 트랜스파일 규칙
-- Expo preset + `.sql` inline import
-
-**package.json** — 프로젝트 명세서 (deps/scripts/entrypoint)
-- `main: expo-router/entry` = 앱 진입점
-  - RN의 `registerRootComponent`(AppRegistry 등록) 호출을 자동화
-  - 루트 컴포넌트 자리에 `ctx`(`require.context`로 `src/app` 폴더 스캔)를 꽂아 파일기반 라우팅
-
-**app.json** — 앱 정체성 · 네이티브 설정의 단일 소스
-- `scheme: "collection"` = 딥링크 (`collection://...`로 앱 특정 화면 열기, 공유시트/URL붙여넣기 토대)
-- `plugins` = config plugin: prebuild 때 네이티브 파일(Info.plist/AndroidManifest/gradle) 수정하는 js 함수
-  - 대부분 라이브러리 제공(expo-router/expo-sqlite 등), 이름만 적으면 실행
-  - plugin이 네이티브를 바꿈 → Expo Go(네이티브 고정) 불가 → dev client 빌드 필요
-- CNG(Continuous Native Generation): ios/android 폴더 미보유, `npx expo prebuild`로 생성
-- experiments: `typedRoutes`(라우트 경로 TS 검증) · `reactCompiler`(자동 메모이제이션)
-
-**tsconfig.json** — TypeScript 컴파일러 규칙
-- `extends: expo/tsconfig.base` — Expo 기본 설정 상속(baseUrl 등 포함), 차이만 덮어씀
-- `strict: true` — 엄격 검사 전체 ON (§2 meta 타입안전의 전제)
-- `paths` alias — `@/*`→`./src/*`, `@/assets/*`→`./assets/*` (상대경로 지옥 회피)
-  - 런타임도 동작: metro의 getDefaultConfig가 tsconfig paths를 자동으로 읽어 리졸버에 연결 (babel module-resolver 불필요)
-- `include`의 `.expo/types` = typedRoutes 자동생성 타입(app.json과 짝), `*-env.d.ts`=자동 선언
-
-#### DOING
-- metro.config.js — Expo 번들러 설정. NativeWind 연결 + `.sql` 확장자 허용.
-
-#### REST
-- postcss.config.mjs — Tailwind v4 PostCSS 플러그인.
-- src/global.css — Tailwind/NativeWind 스타일 진입점 + 전역 폰트 토큰.
-- drizzle.config.ts — SQLite/Expo용 Drizzle 설정. `src/db/schema.ts`로 이어짐.
-- .nvmrc — Node 버전 고정.
-- expo-env.d.ts / nativewind-env.d.ts — 자동 타입 선언. 읽기만 하고 수정하지 않음.
-- .gitignore — git 추적 제외 목록.
-
 - [ ] 앱 이름 / 브랜딩 → 확정 시 `entries` 테이블명 등 rename
 - [ ] 카메라 OCR 파이프라인 세부 설계
 - [ ] "새로고침" 시 수동 수정 보존 정책
