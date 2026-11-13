@@ -11,6 +11,7 @@ export const ICONS = {
   heartFill: { ios: "heart.fill", android: "favorite", web: "favorite" },
   link: { ios: "arrow.up.right.square", android: "open_in_new", web: "open_in_new" },
   trash: { ios: "trash", android: "delete", web: "delete" },
+  refresh: { ios: "arrow.clockwise", android: "refresh", web: "refresh" },
   list: { ios: "list.bullet", android: "list", web: "list" },
   grid: { ios: "square.grid.3x3", android: "grid_view", web: "grid_view" },
   calendar: { ios: "calendar", android: "calendar_month", web: "calendar_month" },

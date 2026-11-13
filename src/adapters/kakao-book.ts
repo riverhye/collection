@@ -25,26 +25,34 @@ function pickIsbn(raw: string) {
   return parts.find((p) => p.length === 13) ?? parts[0] ?? "";
 }
 
+function toResult(doc: Doc): SearchResult {
+  const isbn = pickIsbn(doc.isbn);
+  const author = doc.authors.join(", ");
+  return {
+    externalId: isbn || doc.url,
+    title: doc.title,
+    subtitle: [author, doc.publisher].filter(Boolean).join(" · "),
+    thumbnail: doc.thumbnail || null,
+    url: doc.url || null,
+    meta: {
+      isbn: isbn || undefined,
+      author: author || undefined,
+      publisher: doc.publisher || undefined,
+      pubDate: doc.datetime ? doc.datetime.slice(0, 10) : undefined,
+    },
+  };
+}
+
 export const kakaoBookAdapter: SourceAdapter = {
   async search(query, signal) {
     const data = await search(`query=${encodeURIComponent(query)}`, signal);
-    return data.documents.map((doc): SearchResult => {
-      const isbn = pickIsbn(doc.isbn);
-      const author = doc.authors.join(", ");
-      return {
-        externalId: isbn || doc.url,
-        title: doc.title,
-        subtitle: [author, doc.publisher].filter(Boolean).join(" · "),
-        thumbnail: doc.thumbnail || null,
-        url: doc.url || null,
-        meta: {
-          isbn: isbn || undefined,
-          author: author || undefined,
-          publisher: doc.publisher || undefined,
-          pubDate: doc.datetime ? doc.datetime.slice(0, 10) : undefined,
-        },
-      };
-    });
+    return data.documents.map(toResult);
+  },
+
+  async lookup(isbn) {
+    const data = await search(`target=isbn&query=${encodeURIComponent(isbn)}`, new AbortController().signal);
+    const doc = data.documents.find((d) => d.isbn.split(" ").includes(isbn)) ?? data.documents[0];
+    return doc ? toResult(doc) : null;
   },
 
   async summary(meta, signal) {

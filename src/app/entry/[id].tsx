@@ -1,7 +1,9 @@
 import { router, Stack, useLocalSearchParams } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
 import { useState } from "react";
-import { Alert, Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Alert, Pressable, ScrollView, Text, TextInput, View } from "react-native";
+
+import { lookupEntry, refreshableId } from "@/adapters/registry";
 
 import { draftFromEntry, draftToInput, EntryForm, type EntryDraft } from "@/components/entry-form";
 import { Icon, ICONS } from "@/components/icon";
@@ -11,6 +13,7 @@ import { createEntry, deleteEntry, getEntry, setFavorite, updateEntry } from "@/
 import { getDetailMode } from "@/data/settings";
 import { ENTRY_TYPE_LABELS, type EntryInput, type EntryWithTags } from "@/domain/entry";
 import { metaRows } from "@/domain/meta-fields";
+import { diffRefresh } from "@/domain/refresh";
 import { useDbQuery } from "@/hooks/use-db-query";
 import { useSummary } from "@/hooks/use-summary";
 
@@ -119,6 +122,40 @@ function EntryView({
     if (memo.trim() !== (entry.memo ?? "")) updateEntry(entry.id, { memo: memo.trim() || null });
   };
 
+  const [refreshing, setRefreshing] = useState(false);
+
+  // Never overwrites silently: shows what changed at the source and asks first (PLAN §8 refresh policy).
+  const refresh = async () => {
+    setRefreshing(true);
+    let fresh: Awaited<ReturnType<typeof lookupEntry>> = null;
+    try {
+      fresh = await lookupEntry(entry);
+    } catch {
+      Alert.alert("새로고침하지 못했어요", "인터넷 연결을 확인하세요.");
+      return;
+    } finally {
+      setRefreshing(false);
+    }
+    if (!fresh) {
+      Alert.alert("원본에서 찾을 수 없어요", "삭제되었거나 비공개로 바뀌었을 수 있어요.");
+      return;
+    }
+    const { changes, patch } = diffRefresh(entry, fresh);
+    if (changes.length === 0) {
+      if (Object.keys(patch).length > 0) updateEntry(entry.id, patch);
+      Alert.alert("이미 최신 정보예요");
+      return;
+    }
+    Alert.alert(
+      `바뀐 정보 ${changes.length}개`,
+      changes.map((c) => `${c.label}: ${c.from} → ${c.to}`).join("\n"),
+      [
+        { text: "취소", style: "cancel" },
+        { text: "업데이트", onPress: () => updateEntry(entry.id, patch) },
+      ],
+    );
+  };
+
   return (
     <>
       {/* 기본 정보 */}
@@ -177,7 +214,16 @@ function EntryView({
         <Text className="text-xs text-zinc-400">
           추가 {entry.createdAt.toLocaleDateString()} · 수정 {entry.updatedAt.toLocaleDateString()}
         </Text>
-        <View className="flex-row gap-3 pt-2">
+        <View className="flex-row flex-wrap gap-3 pt-2">
+          {refreshableId(entry) && (
+            <Pressable
+              onPress={refresh}
+              disabled={refreshing}
+              className="flex-row items-center gap-1.5 rounded-lg bg-zinc-100 px-3 py-2 active:opacity-70 dark:bg-zinc-800">
+              {refreshing ? <ActivityIndicator size="small" /> : <Icon name={ICONS.refresh} size={14} />}
+              <Text className="text-sm text-zinc-900 dark:text-zinc-100">새로고침</Text>
+            </Pressable>
+          )}
           {entry.url && (
             <Pressable
               onPress={() => WebBrowser.openBrowserAsync(entry.url!)}
