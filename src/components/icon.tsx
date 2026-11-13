@@ -11,6 +11,11 @@ export const ICONS = {
   heartFill: { ios: "heart.fill", android: "favorite", web: "favorite" },
   link: { ios: "arrow.up.right.square", android: "open_in_new", web: "open_in_new" },
   trash: { ios: "trash", android: "delete", web: "delete" },
+  list: { ios: "list.bullet", android: "list", web: "list" },
+  grid: { ios: "square.grid.3x3", android: "grid_view", web: "grid_view" },
+  calendar: { ios: "calendar", android: "calendar_month", web: "calendar_month" },
+  chevronLeft: { ios: "chevron.left", android: "chevron_left", web: "chevron_left" },
+  chevronRight: { ios: "chevron.right", android: "chevron_right", web: "chevron_right" },
 } satisfies Record<string, IconName>;
 
 type Props = {

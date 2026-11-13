@@ -18,7 +18,13 @@ export type EntryFilter = {
   tagNames?: string[];
   /** "and": entry has every selected tag (default). "or": entry has at least one. */
   tagMode?: "and" | "or";
+  /** Inclusive YYYY-MM-DD range on 본 날, falling back to the day it was added when 본 날 is empty. */
+  dateFrom?: string | null;
+  dateTo?: string | null;
 };
+
+/** 본 날, or the local day it was added (PLAN §2: experienced_date falls back to created_at). */
+const effectiveDate = sql`coalesce(${entries.experiencedDate}, date(${entries.createdAt} / 1000, 'unixepoch', 'localtime'))`;
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
@@ -73,6 +79,9 @@ export function listEntries(filter: EntryFilter = {}): EntryWithTags[] {
   }
   if (filter.type) conditions.push(eq(entries.type, filter.type));
   if (filter.favoriteOnly) conditions.push(eq(entries.favorite, true));
+
+  if (filter.dateFrom) conditions.push(sql`${effectiveDate} >= ${filter.dateFrom}`);
+  if (filter.dateTo) conditions.push(sql`${effectiveDate} <= ${filter.dateTo}`);
 
   const tagNames = filter.tagNames ?? [];
   if (tagNames.length > 0) {

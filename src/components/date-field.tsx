@@ -2,29 +2,27 @@ import { DateTimePicker } from "@expo/ui/community/datetime-picker";
 import { useState } from "react";
 import { Platform, Pressable, Text, View } from "react-native";
 
+import { fromYmd as toDate, toYmd } from "@/domain/date-range";
+
 type Props = {
   /** YYYY-MM-DD or null */
   value: string | null;
   onChange: (value: string | null) => void;
+  /** Label for the button shown while empty. */
+  emptyLabel?: string;
+  /** Hide "지우기" (for fields that must keep a value). */
+  required?: boolean;
+  /** Latest selectable day; defaults to today (본 날 can't be in the future). null = no limit. */
+  maximumDate?: Date | null;
 };
 
-function toDate(value: string) {
-  const [y, m, d] = value.split("-").map(Number);
-  return new Date(y, m - 1, d);
-}
-
-function toYmd(date: Date) {
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
-}
-
-export function DateField({ value, onChange }: Props) {
+export function DateField({ value, onChange, emptyLabel = "날짜 추가", required, maximumDate = new Date() }: Props) {
   const [androidOpen, setAndroidOpen] = useState(false);
 
   if (!value) {
     return (
       <Pressable onPress={() => onChange(toYmd(new Date()))} className="self-start py-1 active:opacity-60">
-        <Text className="text-base text-blue-600 dark:text-blue-400">날짜 추가</Text>
+        <Text className="text-base text-blue-600 dark:text-blue-400">{emptyLabel}</Text>
       </Pressable>
     );
   }
@@ -36,7 +34,7 @@ export function DateField({ value, onChange }: Props) {
           value={toDate(value)}
           mode="date"
           display="compact"
-          maximumDate={new Date()}
+          maximumDate={maximumDate ?? undefined}
           onValueChange={(_, date) => onChange(toYmd(date))}
         />
       ) : (
@@ -48,7 +46,7 @@ export function DateField({ value, onChange }: Props) {
             <DateTimePicker
               value={toDate(value)}
               mode="date"
-              maximumDate={new Date()}
+              maximumDate={maximumDate ?? undefined}
               onValueChange={(_, date) => {
                 setAndroidOpen(false);
                 onChange(toYmd(date));
@@ -58,9 +56,11 @@ export function DateField({ value, onChange }: Props) {
           )}
         </>
       )}
-      <Pressable onPress={() => onChange(null)} className="py-1 active:opacity-60">
-        <Text className="text-sm text-zinc-500">지우기</Text>
-      </Pressable>
+      {!required && (
+        <Pressable onPress={() => onChange(null)} className="py-1 active:opacity-60">
+          <Text className="text-sm text-zinc-500">지우기</Text>
+        </Pressable>
+      )}
     </View>
   );
 }
