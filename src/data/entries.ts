@@ -22,6 +22,8 @@ export type EntryFilter = {
   /** Inclusive YYYY-MM-DD range on 본 날, falling back to the day it was added when 본 날 is empty. */
   dateFrom?: string | null;
   dateTo?: string | null;
+  /** Entry has any of these genres (meta.genres from TMDB). */
+  genres?: string[];
 };
 
 /** 본 날, or the local day it was added (PLAN §2: experienced_date falls back to created_at). */
@@ -84,6 +86,15 @@ export function listEntries(filter: EntryFilter = {}): EntryWithTags[] {
   if (filter.dateFrom) conditions.push(sql`${effectiveDate} >= ${filter.dateFrom}`);
   if (filter.dateTo) conditions.push(sql`${effectiveDate} <= ${filter.dateTo}`);
 
+  const genres = filter.genres ?? [];
+  if (genres.length > 0) {
+    const list = sql.join(
+      genres.map((g) => sql`${g}`),
+      sql`, `,
+    );
+    conditions.push(sql`exists (select 1 from json_each(${entries.meta}, '$.genres') where value in (${list}))`);
+  }
+
   const tagNames = filter.tagNames ?? [];
   if (tagNames.length > 0) {
     if (filter.tagMode === "or") {
@@ -139,6 +150,13 @@ export function findSameTitle(title: string, excludeId?: string): Entry[] {
     .orderBy(desc(entries.createdAt))
     .all()
     .map(toEntry);
+}
+
+/** Genres across movies and TV (meta.genres), most common first. */
+export function listGenres(): { name: string; count: number }[] {
+  return db.all<{ name: string; count: number }>(
+    sql`select g.value as name, count(*) as count from ${entries}, json_each(${entries.meta}, '$.genres') g group by g.value order by count desc, name`,
+  );
 }
 
 export function listTags(): { name: string; count: number }[] {
